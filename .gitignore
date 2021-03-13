@@ -1,1 +1,4 @@
 *.o
+webserver
+webserver_dynamic
+webserver_pool
