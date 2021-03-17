@@ -8,15 +8,14 @@ All of your changes should be made to this file, with the possible
 exception that you may add items to struct request in request.h
 */
 
+#include "request.h"
+#include "tcp.h"
 #include <errno.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include "request.h"
-#include "tcp.h"
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
