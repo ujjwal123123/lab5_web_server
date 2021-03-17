@@ -7,8 +7,10 @@
 #include <stdlib.h>
 
 // Implement circular queue
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 #define SIZE 100
+
 struct queue_t {
     struct request **array; // array of all the items
     int start;              // index from which item should be removed
@@ -32,6 +34,7 @@ struct request *remove_queue(struct queue_t *queue) {
 
     sem_wait(&(queue->filled));
 
+    pthread_mutex_lock(&mutex);
     struct request *ret_val = queue->array[queue->start];
     assert(ret_val);
     assert(ret_val->filename);
@@ -39,6 +42,7 @@ struct request *remove_queue(struct queue_t *queue) {
 
     printf("Queue: Removed from the queue %s (TID %lu)\n", ret_val->filename,
            pthread_self());
+    pthread_mutex_unlock(&mutex);
     return ret_val;
 }
 
@@ -53,9 +57,11 @@ void insert_queue(struct queue_t *queue, struct request *item_to_be_inserted) {
 
     assert(item_to_be_inserted->filename);
 
+    pthread_mutex_lock(&mutex);
     printf("Queue: inserting into queue: %s (TID: %lu)\n",
            item_to_be_inserted->filename, pthread_self());
 
     queue->array[queue->end] = item_to_be_inserted;
     queue->end = (queue->end + 1) % SIZE;
+    pthread_mutex_unlock(&mutex);
 }
