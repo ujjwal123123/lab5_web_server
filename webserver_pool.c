@@ -10,21 +10,44 @@
  that you may add items to struct request in request.h
  */
 
+/*
+ TODOs:
+ 3. Implement two algorithms:
+    a. Shortest File First
+    b. First Come First Served
+ 4. Do not use busy waiting
+ */
+
+#include "queue.h" // TODO: use header file instead
 #include "request.h"
 #include "tcp.h"
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-void thread_request_handler(struct request *req) {
-    printf("webserver: got request for %s\n", req->filename);
-    request_handle(req);
+#define NTHREADS 10
 
-    printf("webserver: done sending %s\n", req->filename);
-    request_delete(req);
+// Equivalent to a consumer in the producer consumer problem
+void thread_request_handler(struct queue_t *queue) {
+    // to allocate the resource of thread back to the machine on completion of
+    // thread
+    pthread_detach(pthread_self());
+
+    printf("[Thread] thread created %lu\n", pthread_self());
+
+    while (true) {
+        struct request *req = remove_queue(queue);
+
+        printf("[Thread] serving a request %s (TID: %lu)\n", req->filename,
+               pthread_self());
+        request_handle(req);
+        request_delete(req);
+    }
 
     pthread_exit(NULL); // SIGSEGV if not exited
 }
@@ -38,7 +61,7 @@ int main(int argc, char *argv[]) {
     if (chdir("webdocs") != 0) {
         fprintf(stderr, "couldn't change to webdocs directory: %s\n",
                 strerror(errno));
-        return 1;
+        return 2;
     }
 
     int port = atoi(argv[1]);
@@ -47,37 +70,43 @@ int main(int argc, char *argv[]) {
     if (!master) {
         fprintf(stderr, "couldn't listen on port %d: %s\n", port,
                 strerror(errno));
-        return 1;
+        return 3;
     }
 
     // With help from :
     // https://www.thegeekstuff.com/2012/04/create-threads-in-linux/
 
-    printf("webserver: waiting for requests..\n");
+    struct queue_t *request_queue = new_queue();
 
-    while (1) {
-        /* TODO: why are we creating new connections on the same port mulitple
-         * times? */
+    // Some code from
+    // https://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
+
+    pthread_t thread_id[NTHREADS]; // TODO: use malloc instead
+    for (int i = 0; i < NTHREADS; i++) {
+        pthread_create(&thread_id[i], NULL, thread_request_handler,
+                       request_queue);
+        // pthread_join(thread_id[i], NULL);
+    }
+    printf("[Main] threads created..\n");
+
+    while (true) {
         struct tcp *conn =
             tcp_accept(master, time(0) + 300); // creates a new TCP connection
 
         if (conn) {
-            printf("webserver: got new connection.\n");
+            printf("[Main] got new connection.\n");
             struct request *req = request_create(conn);
 
             if (req) {
-                // creating threds
-                printf("Creating new thread\n");
-                pthread_t thread;
-                pthread_create(&thread, NULL, (void *)thread_request_handler,
-                               req);
+                printf("[Main] got request for %s\n", req->filename);
+                insert_queue(request_queue, req);
             }
             else {
                 tcp_close(conn);
             }
         }
         else {
-            printf("webserver: shutting down because idle too long\n");
+            printf("[Main] shutting down because idle too long\n");
             break;
         }
     }
