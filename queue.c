@@ -8,6 +8,7 @@
 
 // Implement circular queue
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t conditional_variable = PTHREAD_COND_INITIALIZER;
 
 #define SIZE 100
 
@@ -15,7 +16,6 @@ struct queue_t {
     struct request **array; // array of all the items
     int start;              // index from which item should be removed
     int end;                // index at which item should be added
-    sem_t filled;           // number of items in the queue
 };
 
 struct queue_t *new_queue() {
@@ -23,7 +23,6 @@ struct queue_t *new_queue() {
     queue->start = 0; // index from which an item should be removed
     queue->end = 0;   // index at which new item should be added
     queue->array = (struct request **)malloc(sizeof(int) * SIZE);
-    sem_init(&(queue->filled), 0, 0);
 
     return queue;
 }
@@ -32,13 +31,14 @@ struct request *remove_queue(struct queue_t *queue) {
     assert(queue != NULL);
     assert(queue->array != NULL);
 
-    sem_wait(&(queue->filled));
+    printf("[Thread] waiting\n");
 
     pthread_mutex_lock(&mutex);
-    int semaphore_value;
-    sem_getvalue(&(queue->filled), &semaphore_value);
-    printf("[Queue] before removing, filled: %d, start: %d, end : %d\n",
-           semaphore_value, queue->start, queue->end);
+    printf("[Thread] Lock acquired\n");
+    pthread_cond_wait(&conditional_variable, &mutex);
+
+    printf("[Queue] before removing, start: %d, end : %d\n", queue->start,
+           queue->end);
     assert(queue->start != queue->end);
 
     struct request *ret_val = queue->array[queue->start];
@@ -58,7 +58,7 @@ bool is_full(struct queue_t *queue) { return queue->start == queue->end; }
 
 void insert_queue(struct queue_t *queue, struct request *item_to_be_inserted) {
     pthread_mutex_lock(&mutex);
-    sem_post(&(queue->filled));
+    pthread_cond_signal(&conditional_variable);
 
     assert(item_to_be_inserted->filename);
 
