@@ -15,10 +15,10 @@
  3. Implement two algorithms:
     a. Shortest File First
     b. First Come First Served
- 4. Do not use busy waiting, use conditional variables instead.
+ 4. use conditional variables
  */
 
-#include "priority_queue.c"
+#include "priority_queue.h"
 #include "queue.h"
 #include "request.h"
 #include "tcp.h"
@@ -31,10 +31,16 @@
 #include <string.h>
 #include <unistd.h>
 
-#define NTHREADS 10
+#define FCFS 0
+#define SFF 1
+
+int mode = -1;
+
+PRIORITY_QUEUE *request_priority_queue = NULL;
+struct queue_t *request_queue = NULL;
 
 // Equivalent to a consumer in the producer consumer problem
-void thread_request_handler(struct queue_t *queue) {
+void thread_request_handler() {
     // to allocate the resource of thread back to the machine on completion of
     // thread
     pthread_detach(pthread_self());
@@ -44,7 +50,14 @@ void thread_request_handler(struct queue_t *queue) {
     while (true) {
         // NOTE: there should be no busy waiting because `remove_queue` function
         // proceeds when a lock is held.
-        struct request *req = remove_queue(queue);
+        struct request *req = NULL;
+        if (mode == FCFS) {
+            req = remove_queue(request_queue);
+        }
+        else if (mode == SFF) {
+            printf("[Priority queue] Removing from the priority queue\n");
+            req = extract_maximum(request_priority_queue);
+        }
 
         printf("[Thread] serving a request %s (TID: %lu)\n", req->filename,
                pthread_self());
@@ -56,8 +69,9 @@ void thread_request_handler(struct queue_t *queue) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
-        fprintf(stderr, "use: %s <port>\n", argv[0]);
+    if (argc < 4) {
+        // ./webserver PORT NTHREADS MODE
+        fprintf(stderr, "use: %s <port> <thread count> <mode>\n", argv[0]);
         return 1;
     }
 
@@ -69,26 +83,44 @@ int main(int argc, char *argv[]) {
 
     int port = atoi(argv[1]);
 
+    int thread_count = atoi(argv[2]);
+
+    char *mode_name = argv[3];
+    if (strcmp(mode_name, "FCFS") == 0) {
+        mode = FCFS;
+    }
+    else if (strcmp(mode_name, "SFF") == 0) {
+        mode = SFF;
+    }
+    else {
+        printf("Error: invalid mode\n");
+        return 3;
+    }
+
     struct tcp *master = tcp_listen(port); // TCP master object
     if (!master) {
         fprintf(stderr, "couldn't listen on port %d: %s\n", port,
                 strerror(errno));
-        return 3;
+        return 4;
     }
 
     // With help from :
     // https://www.thegeekstuff.com/2012/04/create-threads-in-linux/
 
-    struct queue_t *request_queue = new_queue();
+    if (mode == FCFS) {
+        request_queue = new_queue();
+    }
+    else if (mode == SFF) {
+        request_priority_queue = init_priority_queue();
+    }
 
     // Some code from
     // https://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
 
-    pthread_t *thread_id = (pthread_t)malloc(sizeof(pthread_t *) * NTHREADS);
-    for (int i = 0; i < NTHREADS; i++) {
-        pthread_create(&thread_id[i], NULL, thread_request_handler,
-                       request_queue);
-        // pthread_join(thread_id[i], NULL);
+    pthread_t *thread_id =
+        (pthread_t *)malloc(sizeof(pthread_t *) * thread_count);
+    for (int i = 0; i < thread_count; i++) {
+        pthread_create(&thread_id[i], NULL, thread_request_handler, NULL);
     }
     printf("[Main] threads created..\n");
 
@@ -102,7 +134,13 @@ int main(int argc, char *argv[]) {
 
             if (req) {
                 printf("[Main] got request for %s\n", req->filename);
-                insert_queue(request_queue, req);
+                if (mode == FCFS) {
+                    insert_queue(request_queue, req);
+                }
+                else if (mode == SFF) {
+                    insert_priority_queue(request_priority_queue, req);
+                    printf("[Priority queue] Inserted into priority queue\n");
+                }
             }
             else {
                 tcp_close(conn);
