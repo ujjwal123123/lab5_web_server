@@ -15,10 +15,11 @@
  3. Implement two algorithms:
     a. Shortest File First
     b. First Come First Served
- 4. Do not use busy waiting
+ 4. Do not use busy waiting, use conditional variables instead.
  */
 
-#include "queue.h" // TODO: use header file instead
+#include "priority_queue.c"
+#include "queue.h"
 #include "request.h"
 #include "tcp.h"
 #include <errno.h>
@@ -41,6 +42,8 @@ void thread_request_handler(struct queue_t *queue) {
     printf("[Thread] thread created %lu\n", pthread_self());
 
     while (true) {
+        // NOTE: there should be no busy waiting because `remove_queue` function
+        // proceeds when a lock is held.
         struct request *req = remove_queue(queue);
 
         printf("[Thread] serving a request %s (TID: %lu)\n", req->filename,
@@ -81,7 +84,7 @@ int main(int argc, char *argv[]) {
     // Some code from
     // https://www.cs.cmu.edu/afs/cs/academic/class/15492-f07/www/pthreads.html
 
-    pthread_t thread_id[NTHREADS]; // TODO: use malloc instead
+    pthread_t *thread_id = (pthread_t)malloc(sizeof(pthread_t *) * NTHREADS);
     for (int i = 0; i < NTHREADS; i++) {
         pthread_create(&thread_id[i], NULL, thread_request_handler,
                        request_queue);

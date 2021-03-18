@@ -8,10 +8,12 @@ and if necessary, to struct request in request.h
 #include "request.h"
 #include "tcp.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define REQUEST_LINE_MAX 1024
@@ -62,6 +64,15 @@ struct request *request_create(struct tcp *conn) {
     }
     else {
         r->filename = strdup(&path[1]);
+    }
+
+    // write filesize, needed for shortest file first
+    struct stat st;
+    if (stat(r->filename, &st) != 0) {
+        r->filesize = st.st_size;
+    }
+    else {
+        perror("Error: Could not get file size\n");
     }
 
     return r;

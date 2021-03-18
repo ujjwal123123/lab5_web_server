@@ -14,6 +14,7 @@ if necessary.
 struct request {
     char *filename;
     struct tcp *conn;
+    int filesize;
 };
 
 /*
