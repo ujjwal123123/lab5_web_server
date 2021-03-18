@@ -68,13 +68,13 @@ struct request *request_create(struct tcp *conn) {
 
     // write filesize, needed for shortest file first
     struct stat st;
-    if (stat(r->filename, &st) != 0) {
-        r->filesize = st.st_size;
+    printf("Filename: %s\n", r->filename);
+    if (stat(r->filename, &st) == 0) {
+        r->filesize = -st.st_size;
     }
     else {
-        perror("Error: Could not get file size\n");
+        perror("Error: Could not get file size");
     }
-
     return r;
 }
 
