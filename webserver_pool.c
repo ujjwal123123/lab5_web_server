@@ -10,14 +10,6 @@
  that you may add items to struct request in request.h
  */
 
-/*
- TODOs:
- 3. Implement two algorithms:
-    a. Shortest File First
-    b. First Come First Served
- 4. use conditional variables
- */
-
 #include "priority_queue.h"
 #include "queue.h"
 #include "request.h"
@@ -39,6 +31,9 @@ int mode = -1;
 PRIORITY_QUEUE *request_priority_queue = NULL;
 struct queue_t *request_queue = NULL;
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t conditional_variable = PTHREAD_COND_INITIALIZER;
+
 // Equivalent to a consumer in the producer consumer problem
 void thread_request_handler() {
     // to allocate the resource of thread back to the machine on completion of
@@ -48,9 +43,11 @@ void thread_request_handler() {
     printf("[Thread] thread created %lu\n", pthread_self());
 
     while (true) {
-        // NOTE: there should be no busy waiting because `remove_queue` function
-        // proceeds when a lock is held.
+        // This does not use busy waiting
         struct request *req = NULL;
+        pthread_mutex_lock(&mutex);
+        pthread_cond_wait(&conditional_variable, &mutex);
+        printf("[Thread] Lock acquired (TID %lu)\n", pthread_self());
         if (mode == FCFS) {
             req = remove_queue(request_queue);
         }
@@ -58,12 +55,15 @@ void thread_request_handler() {
             printf("[Priority queue] Removing from the priority queue\n");
             req = extract_maximum(request_priority_queue);
         }
+        pthread_mutex_unlock(&mutex);
 
         printf("[Thread] serving a request %s (TID: %lu)\n", req->filename,
                pthread_self());
         request_handle(req);
         request_delete(req);
     }
+
+    printf("[Thread] Closing thread\n");
 
     pthread_exit(NULL); // SIGSEGV if not exited
 }
@@ -134,13 +134,17 @@ int main(int argc, char *argv[]) {
 
             if (req) {
                 printf("[Main] got request for %s\n", req->filename);
+                pthread_mutex_lock(&mutex);
+                pthread_cond_signal(&conditional_variable);
+
                 if (mode == FCFS) {
                     insert_queue(request_queue, req);
                 }
                 else if (mode == SFF) {
                     insert_priority_queue(request_priority_queue, req);
-                    printf("[Priority queue] Inserted into priority queue\n");
                 }
+                printf("[Queue] Inserted into queue\n");
+                pthread_mutex_unlock(&mutex);
             }
             else {
                 tcp_close(conn);

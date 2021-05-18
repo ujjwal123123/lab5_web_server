@@ -1,14 +1,11 @@
 #include "request.h"
 #include <assert.h>
 #include <pthread.h>
-#include <semaphore.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 // Implement circular queue
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t conditional_variable = PTHREAD_COND_INITIALIZER;
 
 #define SIZE 100
 
@@ -33,10 +30,6 @@ struct request *remove_queue(struct queue_t *queue) {
 
     printf("[Thread] waiting\n");
 
-    pthread_mutex_lock(&mutex);
-    printf("[Thread] Lock acquired\n");
-    pthread_cond_wait(&conditional_variable, &mutex);
-
     printf("[Queue] before removing, start: %d, end : %d\n", queue->start,
            queue->end);
     assert(queue->start != queue->end);
@@ -48,7 +41,6 @@ struct request *remove_queue(struct queue_t *queue) {
 
     printf("[Queue] Removed from the queue %s (TID %lu)\n", ret_val->filename,
            pthread_self());
-    pthread_mutex_unlock(&mutex);
     return ret_val;
 }
 
@@ -57,9 +49,6 @@ bool is_empty(struct queue_t *queue) { return queue->start == queue->end; }
 bool is_full(struct queue_t *queue) { return queue->start == queue->end; }
 
 void insert_queue(struct queue_t *queue, struct request *item_to_be_inserted) {
-    pthread_mutex_lock(&mutex);
-    pthread_cond_signal(&conditional_variable);
-
     assert(item_to_be_inserted->filename);
 
     printf("[Queue] inserting into queue: %s (TID: %lu)\n",
@@ -69,5 +58,4 @@ void insert_queue(struct queue_t *queue, struct request *item_to_be_inserted) {
     queue->end = (queue->end + 1) % SIZE;
     printf("[Queue] after inserting, start: %d, end : %d\n", queue->start,
            queue->end);
-    pthread_mutex_unlock(&mutex);
 }
